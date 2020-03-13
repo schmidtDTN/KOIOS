@@ -418,7 +418,7 @@ class questionSwitcher(object):
         # Declare lists used later
         adjectiveNodes = []
         antonymNodes = []
-        lexicalGapFound = False
+        openGap = False
         # Break up the predicate
         predicateComponents = predicateContents.split(',')
         numberOfComponents = len(predicateComponents)
@@ -450,7 +450,6 @@ class questionSwitcher(object):
         # INITIAL NYM TESTING - will need to extend to other predicates as well of course
         # TODO: Resolve occurs before identify here - that shouldn't be the case probably
         adjectiveNymList, antonymList = getNyms(propAdjective)
-        adjectiveNymList.append(propAdjective)
         if CONTROL_RESOLVE_LEXICAL is True:
             adjectiveNodes = self.ListOfNodesWithValueFromList(adjectiveNymList)
         else:
@@ -461,7 +460,7 @@ class questionSwitcher(object):
         newNymCount = 0
         if CONTROL_IDENTIFY_LEXICAL is True:
             if len(adjectiveNodes) < 1:
-                lexicalGapFound = True
+                openGap = True
                 print("Lexical gap encountered - an adjective (" + propAdjective + ") was introduced which is not"
                                                                                    " currently in the system's vocabulary.")
             if CONTROL_RESOLVE_LEXICAL is True:
@@ -491,8 +490,7 @@ class questionSwitcher(object):
                     DRSNodeRefID = self.DRSGraph.graph.node[propertyNode][CONST_NODE_VALUE_KEY]
                     self.newToOldRefIDMapping.update({propRefId: DRSNodeRefID})
                     self.propertyCount = self.propertyCount + 1
-                else:
-                    self.newToOldRefIDMapping.update({propRefId: None})
+                    openGap = False
 
         if CONTROL_IDENTIFY_NEGATION == True:
             if len(antonymNodes) > 0:
@@ -511,11 +509,10 @@ class questionSwitcher(object):
                             self.newToOldRefIDMapping.update({propRefId: DRSNodeRefID})
                             self.propertyCount = self.propertyCount + 1
                             self.negationActive = True
-                        else:
-                            self.newToOldRefIDMapping.update({propRefId: None})
+                            openGap = False
 
         # If not adjective or antonym node found, make sure the reference ID gets removed
-        if (len(adjectiveNodes) == 0 and len(antonymNodes) == 0) or lexicalGapFound == True:
+        if (len(adjectiveNodes) == 0 and len(antonymNodes) == 0) or openGap == True:
             self.newToOldRefIDMapping.update({propRefId: None})
             self.propertyCount = self.propertyCount + 1
 
