@@ -323,7 +323,7 @@ class predicateSwitcher(object):
                     # Update graph with name
                     adjectiveNode = endNode
             if adjectiveNode is not None:
-                #TODO: SEE IF I CAN UPDATE THIS TO NOT USE THIS FUNCTION
+                # TODO: SEE IF I CAN UPDATE THIS TO NOT USE THIS FUNCTION
                 self.DRSGraph.AppendValueAtSpecificNode(adjectiveNode, propAdjective)
             else:
                 print("Error - Encountered duplicate reference for property but did not find adjective "
@@ -355,9 +355,9 @@ class questionSwitcher(object):
         self.itemCount = 0
         self.propertyCount = 0
         self.newToOldRefIDMapping = {}
-        # TODO: totally unsure if this is right
         self.predicateTrue = None
         self.negationActive = None
+        self.verbTargetGap = False
 
     # Method to call the appropriate function based on the argument passed in
     def callFunction(self, predicateType, predicateContents, DRSGraph):
@@ -388,8 +388,8 @@ class questionSwitcher(object):
         newNymCount = 0
         if CONTROL_IDENTIFY_LEXICAL is True:
             if DRSEquivalentNode is None:
-                print("Lexical gap encountered - an adjective was introduced which is not currently in the system's "
-                      "vocabulary.")
+                print("Lexical gap encountered - a role (" + objRole + ") was introduced which is not currently in the"
+                                                                       " system's vocabulary.")
                 if CONTROL_RESOLVE_LEXICAL is True:
                     # TODO: Allow user to manually choose yes/no to resolve?
                     while DRSEquivalentNode is None and newNymCount < 3:
@@ -398,8 +398,8 @@ class questionSwitcher(object):
                         newNymCount = newNymCount + 1
                         DRSEquivalentNode = self.findMatchingItemNode(newRole, objOperator, objCount)
                         if DRSEquivalentNode is not None:
-                            print("Lexical gap resolved - a role given was found associated with an item in the "
-                                  "knowledge base")
+                            print("Lexical gap resolved - a role given (" + newRole + ") was found associated with an"
+                                                                                      " item in the knowledge base")
                             DRSEquivalentNameNode = self.findRoleNodeConnectedToItemNode(DRSEquivalentNode)
                             self.DRSGraph.AppendValueAtSpecificNode(DRSEquivalentNameNode, objRole)
         # Replace the reference ID (from APE Webclient) to the equivalent node's reference ID (from the graph)
@@ -415,6 +415,10 @@ class questionSwitcher(object):
     # TODO: Handle 4/6 component properties
     # TODO: Handle degrees besides "pos"
     def question_property(self, predicateContents):
+        # Declare lists used later
+        adjectiveNodes = []
+        antonymNodes = []
+        lexicalGapFound = False
         # Break up the predicate
         predicateComponents = predicateContents.split(',')
         numberOfComponents = len(predicateComponents)
@@ -446,21 +450,20 @@ class questionSwitcher(object):
         # INITIAL NYM TESTING - will need to extend to other predicates as well of course
         # TODO: Resolve occurs before identify here - that shouldn't be the case probably
         adjectiveNymList, antonymList = getNyms(propAdjective)
+        adjectiveNymList.append(propAdjective)
         if CONTROL_RESOLVE_LEXICAL is True:
             adjectiveNodes = self.ListOfNodesWithValueFromList(adjectiveNymList)
         else:
             adjectiveNodes = self.ListOfNodesWithValue(propAdjective)
         if CONTROL_IDENTIFY_NEGATION is True:
-            if CONTROL_RESOLVE_LEXICAL is True:
-                antonymNodes = self.ListOfNodesWithValueFromList(antonymList)
-            else:
-                antonymNodes = self.ListOfNodesWithValue(propAdjective)
+            antonymNodes = self.ListOfNodesWithValueFromList(antonymList)
 
         newNymCount = 0
         if CONTROL_IDENTIFY_LEXICAL is True:
             if len(adjectiveNodes) < 1:
-                print("Lexical gap encountered - an adjective was introduced which is not currently in the system's "
-                      "vocabulary.")
+                lexicalGapFound = True
+                print("Lexical gap encountered - an adjective (" + propAdjective + ") was introduced which is not"
+                                                                                   " currently in the system's vocabulary.")
             if CONTROL_RESOLVE_LEXICAL is True:
                 # TODO: Allow user to manually choose yes/no to resolve?
                 # Should antonymNodes be counted here too?
@@ -472,7 +475,8 @@ class questionSwitcher(object):
                     antonymNodes = self.ListOfNodesWithValueFromList(newAntonymList)
                     adjectiveNodes = self.ListOfNodesWithValueFromList(adjectiveNymList)
                     if len(adjectiveNodes) > 0:
-                        print("Lexical gap resolved - an adjective given was found in the knowledge base")
+                        print("Lexical gap resolved - an adjective given (" + newAdjective + ") was found in the"
+                                                                                             " knowledge base")
 
         if len(adjectiveNodes) > 0:
             for node in adjectiveNodes:
@@ -490,8 +494,8 @@ class questionSwitcher(object):
                 else:
                     self.newToOldRefIDMapping.update({propRefId: None})
 
-        if len(antonymNodes) > 0:
-            if CONTROL_IDENTIFY_NEGATION == True:
+        if CONTROL_IDENTIFY_NEGATION == True:
+            if len(antonymNodes) > 0:
                 print("Negation gap identified - a node has been found that contains an antonym of one of the "
                       "provided adjectives")
                 # propertyNodesWithAdjective = []
@@ -509,6 +513,11 @@ class questionSwitcher(object):
                             self.negationActive = True
                         else:
                             self.newToOldRefIDMapping.update({propRefId: None})
+
+        # If not adjective or antonym node found, make sure the reference ID gets removed
+        if (len(adjectiveNodes) == 0 and len(antonymNodes) == 0) or lexicalGapFound == True:
+            self.newToOldRefIDMapping.update({propRefId: None})
+            self.propertyCount = self.propertyCount + 1
 
         # ***********************************************************************************************************************************
         # If no adjective nodes are found, then we look for antonyms
@@ -569,28 +578,28 @@ class questionSwitcher(object):
         # Substitute in DRS equivalents for dereferenced ref IDs
         if predSubjRef in self.newToOldRefIDMapping:
             predSubjRef = self.newToOldRefIDMapping.get(predSubjRef)
-            if predSubjRef is None:
-                # TODO: Better define this error case
-                if CONTROL_IDENTIFY_LEXICAL:
-                    print("Lexical gap encountered - an item was introduced which is not currently in the system's "
-                          "vocabulary.")
-                return None
+            # if predSubjRef is None:
+            #    # TODO: Better define this error case
+            #    if CONTROL_IDENTIFY_LEXICAL:
+            #        print("Lexical gap encountered - a term was encountered which is not currently in the system's "
+            #              "vocabulary.")
+            #    return None
         if predDirObjRef is not None and predDirObjRef in self.newToOldRefIDMapping:
             predDirObjRef = self.newToOldRefIDMapping.get(predDirObjRef)
-            if predDirObjRef is None:
-                # TODO: Better define this error case
-                if CONTROL_IDENTIFY_LEXICAL:
-                    print("Lexical gap encountered - an item was introduced which is not currently in the system's "
-                          "vocabulary.")
-                    return None
+            # if predDirObjRef is None:
+            #    # TODO: Better define this error case
+            #    if CONTROL_IDENTIFY_LEXICAL:
+            #        print("Lexical gap encountered - a term was encountered which is not currently in the system's "
+            #              "vocabulary.")
+            #        return None
         if predIndirObjRef is not None and predIndirObjRef in self.newToOldRefIDMapping:
             predIndirObjRef = self.newToOldRefIDMapping.get(predIndirObjRef)
-            if predIndirObjRef is None:
-                # TODO: Better define this error case
-                if CONTROL_IDENTIFY_LEXICAL:
-                    print("Lexical gap encountered - an item was introduced which is not currently in the system's "
-                          "vocabulary.")
-                    return None
+            # if predIndirObjRef is None:
+            #    # TODO: Better define this error case
+            #    if CONTROL_IDENTIFY_LEXICAL:
+            #        print("Lexical gap encountered - a term was encountered which is not currently in the system's "
+            #              "vocabulary.")
+            #        return None
         self.handleActionQuestion(numberOfComponents, predVerb, predSubjRef, predDirObjRef)
 
     def handleActionQuestion(self, numberOfComponents, predVerb, predSubjRef, predDirObjRef=None):
@@ -599,42 +608,60 @@ class questionSwitcher(object):
         elif numberOfComponents == 4:
             # Get action node by its name
             actionNode = self.findActionNodeWithVerb(predVerb)
+            if CONTROL_IDENTIFY_LEXICAL is True:
+                if actionNode is None and self.verbTargetGap == False:
+                    print("Lexical gap encountered - a verb (" + predVerb + ") was introduced which is not currently "
+                                                                            "in the system's vocabulary.")
+                    if CONTROL_RESOLVE_LEXICAL is True:
+                        newNymCount = 0
+                        # TODO: Allow user to manually choose yes/no to resolve?
+                        while actionNode is None and newNymCount < 3:
+                            # No nodes "active"
+                            newVerb = requestNewTermToNymCheck(predVerb)
+                            newNymCount = newNymCount + 1
+                            actionNode = self.findActionNodeWithVerb(newVerb)
+                            if actionNode is not None:
+                                print("Lexical gap resolved - a role given (" + newVerb + ") was found associated with "
+                                                                                      "an item in the knowledge base")
+                                self.DRSGraph.AppendValueAtSpecificNode(actionNode, newVerb)
             # actionNode = self.findActionNodeConnectedToVerbNode(verbNode)
             # If the SUBJECT reference is a proper name
             # Check if we find a node containing said name
-            if CONST_PRED_SUBJ_NAMED in predSubjRef:
-                # Get item name out of "named(XYZ)"
-                itemName = predSubjRef[predSubjRef.find("(") + 1:predSubjRef.find(")")]
-                # Add quotes around item name to actually find them since they are added on naming
-                itemName = "\"" + itemName + "\""
-                nodesWithGivenName = self.ListOfNodesWithValue(itemName)
-                if len(nodesWithGivenName) > 0:
-                    itemNodes = []
-                    for nameNode in nodesWithGivenName:
-                        # Need to get the actual item node, not the name node.
-                        itemNode = self.findItemNodeConnectedToNameNode(nameNode)
-                        itemNodes.append(itemNode)
-                    # If only one item with that name, then we've found our subject node
-                    if len(itemNodes) == 1:
-                        self.subjectNode = itemNodes[0]
+            if predSubjRef is not None:
+                if CONST_PRED_SUBJ_NAMED in predSubjRef:
+                    # Get item name out of "named(XYZ)"
+                    itemName = predSubjRef[predSubjRef.find("(") + 1:predSubjRef.find(")")]
+                    # Add quotes around item name to actually find them since they are added on naming
+                    itemName = "\"" + itemName + "\""
+                    nodesWithGivenName = self.ListOfNodesWithValue(itemName)
+                    if len(nodesWithGivenName) > 0:
+                        itemNodes = []
+                        for nameNode in nodesWithGivenName:
+                            # Need to get the actual item node, not the name node.
+                            itemNode = self.findItemNodeConnectedToNameNode(nameNode)
+                            itemNodes.append(itemNode)
+                        # If only one item with that name, then we've found our subject node
+                        if len(itemNodes) == 1:
+                            self.subjectNode = itemNodes[0]
             # Same as above for OBJECT reference
-            if CONST_PRED_SUBJ_NAMED in predDirObjRef:
-                # Get item name out of "named(XYZ)"
-                # Goes all the way to the end because the closed paren has already been stripped if it's the last
-                # item
-                itemName = predDirObjRef[predDirObjRef.find("(") + 1:]
-                # Add quotes around item name to actually find them since they are added on naming
-                itemName = "\"" + itemName + "\""
-                nodesWithGivenName = self.ListOfNodesWithValue(itemName)
-                if len(nodesWithGivenName) > 0:
-                    itemNodes = []
-                    for nameNode in nodesWithGivenName:
-                        # Need to get the actual item node, not the name node.
-                        itemNode = self.findItemNodeConnectedToNameNode(nameNode)
-                        itemNodes.append(itemNode)
-                    # If only one item with that name, then we've found our subject node
-                    if len(itemNodes) == 1:
-                        self.objectNode = itemNodes[0]
+            if predDirObjRef is not None:
+                if CONST_PRED_SUBJ_NAMED in predDirObjRef:
+                    # Get item name out of "named(XYZ)"
+                    # Goes all the way to the end because the closed paren has already been stripped if it's the last
+                    # item
+                    itemName = predDirObjRef[predDirObjRef.find("(") + 1:]
+                    # Add quotes around item name to actually find them since they are added on naming
+                    itemName = "\"" + itemName + "\""
+                    nodesWithGivenName = self.ListOfNodesWithValue(itemName)
+                    if len(nodesWithGivenName) > 0:
+                        itemNodes = []
+                        for nameNode in nodesWithGivenName:
+                            # Need to get the actual item node, not the name node.
+                            itemNode = self.findItemNodeConnectedToNameNode(nameNode)
+                            itemNodes.append(itemNode)
+                        # If only one item with that name, then we've found our subject node
+                        if len(itemNodes) == 1:
+                            self.objectNode = itemNodes[0]
             # Get the subject node
             if self.subjectNode is None:
                 subjectNode = self.DRSGraph.FindItemWithValue(predSubjRef)
@@ -664,7 +691,7 @@ class questionSwitcher(object):
 
     def resolveQuestion(self):
         # Possibly not an actual error condition, just testing this
-        #if self.objectNode is None or self.subjectNode is None:
+        # if self.objectNode is None or self.subjectNode is None:
         #    print("Either the subject or object is missing, so something is wrong")
         #    return None
         if self.predicateTrue == True:
@@ -702,7 +729,7 @@ class questionSwitcher(object):
                 # If could not find a positive or negative relationship, then return None (unknown)
                 return None
             # Assuming if there are two items, there are no properties in the predicate (again, may need corrections)
-            #TODO: This should learn to deal with predicates
+            # TODO: This should learn to deal with predicates
             if self.itemCount == 2:
                 edgeBetweenNodes = self.DRSGraph.graph.get_edge_data(self.subjectNode, self.objectNode)
                 # Iterate through each edge connecting the two nodes if not empty list
@@ -792,7 +819,7 @@ class questionSwitcher(object):
         if CONTROL_IDENTIFY_TARGET is True:
             if len(matchingNodes) > 1:
                 # RAISE A GAP HERE, Found more than one possible node with this value. Have user select.
-                print("TARGET GAP???: More than one node found that describes an item with the role of " + role +
+                print("TARGET GAP: More than one node found that describes an item with the role of " + role +
                       ", the operator of " + operator + ", and the count of " + count + ".")
                 if CONTROL_RESOLVE_TARGET is True:
                     print("DEBUG OPTION: Please select which node you would like to use.")
@@ -801,14 +828,10 @@ class questionSwitcher(object):
                     while nodeSelected not in matchingNodes:
                         nodeSelected = input("Enter a node value")
                     return nodeSelected
-            elif len(matchingNodes) == 0:
-                # NO NODE FOUND matching the description given
-                print("TARGET GAP???  No node found that describes an item with the role of " + role +
-                      ", the operator of " + operator + ", and the count of " + count + ".")
-            else:
-                return matchingNodes.pop()
-        else:
+        if len(matchingNodes) > 0:
             return matchingNodes.pop()
+        else:
+            return None
 
     # TODO: NEED TO HANDLE CASE WHERE MULTIPLE ITEMS
     # TEMP UNTIL FIGURE OUT NAME HANDLING
@@ -842,6 +865,7 @@ class questionSwitcher(object):
                 # RAISE A GAP HERE, Found more than one possible node with this value. Have user select.
                 print("TARGET GAP: More than one action node found that describes an action with the verb " + verb
                       + ".")
+                self.verbTargetGap = True
                 if CONTROL_RESOLVE_TARGET is True:
                     print("DEBUG OPTION: Please select which action node you would like to use.")
                     print(actionNodes)
@@ -849,12 +873,15 @@ class questionSwitcher(object):
                     while nodeSelected not in actionNodes:
                         nodeSelected = input("Enter a node value")
                     return nodeSelected
-            elif len(actionNodes) == 0:
-                # NO NODE FOUND matching the description given
-                print("TARGET GAP: No node found that describes an action with the verb " + verb + ".")
-            else:
-                return actionNodes.pop()
-        return None
+            # elif len(actionNodes) == 0:
+            # NO NODE FOUND matching the description given
+            # print("TARGET GAP: No node found that describes an action with the verb " + verb + ".")
+        # If only one action node, then we know we've found the right action
+        if len(actionNodes) == 1:
+            return actionNodes.pop()
+        # If no action nodes found or if multiple found, we can't be certain of which action is correct.
+        else:
+            return None
 
     def findItemNodeWithNameAndRole(self, strName, strRole):
         # Get list of nodes with the given name
@@ -966,6 +993,7 @@ def APEWebserviceCall(phraseToDRS):
                 questionLines.append(line)
         # Return just the lines that are the actual DRS for the question, no headers
         return questionLines
+
 
 def getNyms(wordToCheck):
     # Iterate through all words to check
@@ -1120,7 +1148,7 @@ def DRSToItem():
                                                 + "aINSTRUCTION_STEP" + str(outputFiles) + ".graphml")
                     # Increase the counter
                     outputFiles = outputFiles + 1
-                    if currentAnnotationLine == 1 or currentAnnotationLine == 3 or currentAnnotationLine == 9 or\
+                    if currentAnnotationLine == 1 or currentAnnotationLine == 3 or currentAnnotationLine == 9 or \
                             currentAnnotationLine == 11 or currentAnnotationLine == 12 or currentAnnotationLine == 13:
                         currentACELine = currentACELine + 1
                     currentAnnotationLine = currentAnnotationLine + 1
